@@ -263,6 +263,21 @@ def test_parse_any_root_object(source_obj, generated_classes):
     'source_obj,generated_classes',
     [
         (
+            yaml.safe_load((DATA_PATH / 'oneof_const.json').read_text()),
+            (DATA_PATH / 'oneof_const.json.snapshot').read_text(),
+        )
+    ],
+)
+def test_parse_one_of_const_object(source_obj, generated_classes):
+    parser = JsonSchemaParser('')
+    parser.parse_raw_obj('Test', source_obj, [])
+    assert dump_templates(list(parser.results)) == generated_classes
+
+
+@pytest.mark.parametrize(
+    'source_obj,generated_classes',
+    [
+        (
             yaml.safe_load((DATA_PATH / 'oneof.json').read_text()),
             (DATA_PATH / 'oneof.json.snapshot').read_text(),
         )

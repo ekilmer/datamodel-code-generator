@@ -158,6 +158,7 @@ class JsonSchemaObject(BaseModel):
     items: Union[List['JsonSchemaObject'], 'JsonSchemaObject', None]
     uniqueItem: Optional[bool]
     type: Union[str, List[str], None]
+    const: Optional[Any]
     format: Optional[str]
     pattern: Optional[str]
     minLength: Optional[int]
@@ -257,6 +258,7 @@ DEFAULT_FIELD_KEYS: Set[str] = {
     'examples',
     'description',
     'title',
+    'discriminator',
 }
 
 EXCLUDE_FIELD_KEYS = (set(JsonSchemaObject.__fields__) - DEFAULT_FIELD_KEYS) | {
@@ -381,6 +383,8 @@ class JsonSchemaParser(Parser):
 
     def get_data_type(self, obj: JsonSchemaObject) -> DataType:
         if obj.type is None:
+            if obj.const is not None:
+                return self.data_type(literals=[obj.const])
             return self.data_type_manager.get_data_type(Types.any)
 
         def _get_data_type(type_: str, format__: str) -> DataType:
@@ -429,6 +433,9 @@ class JsonSchemaParser(Parser):
     def parse_one_of(
         self, name: str, obj: JsonSchemaObject, path: List[str]
     ) -> List[DataType]:
+        for oneof in obj.oneOf:
+            # Make merged required list unique
+            oneof.required = list(set(oneof.required + obj.required))
         return self.parse_list_item(name, obj.oneOf, path, obj)
 
     def parse_all_of(
@@ -524,7 +531,7 @@ class JsonSchemaParser(Parser):
             fields.append(
                 self.data_model_field_type(
                     name=field_name,
-                    default=field.default,
+                    default=field.default or field.const,
                     data_type=field_type,
                     required=required,
                     alias=alias,
@@ -783,9 +790,33 @@ class JsonSchemaParser(Parser):
                     self.parse_any_of(name, obj, get_special_path('anyOf', object_path))
                 )
             if obj.oneOf:
-                data_types.extend(
-                    self.parse_one_of(name, obj, get_special_path('oneOf', object_path))
+                possible_types = self.parse_one_of(
+                    name, obj, get_special_path('oneOf', object_path)
                 )
+                discriminator: Optional[str] = None
+                stop = False
+                for required_field in obj.required:
+                    for possible_type in possible_types:
+                        if (
+                            not possible_type.reference
+                            or not possible_type.reference.source
+                        ):
+                            continue
+                        for field in possible_type.reference.source.fields:
+                            if (
+                                required_field == field.name
+                                and len(field.data_type.literals) == 1
+                            ):
+                                discriminator = required_field
+                                stop = True
+                                break
+                        if stop:
+                            break
+                    if stop:
+                        break
+                data_types.extend(possible_types)
+                if discriminator:
+                    obj.extras['discriminator'] = discriminator
             if len(data_types) > 1:
                 data_type = self.data_type(data_types=data_types)
             else:  # pragma: no cover

@@ -1,0 +1,13 @@
+class TestItem(BaseModel):
+    version: Literal[1] = Field(..., description='Required integer for version of JSON schema.')
+    field1: Optional[int] = None
+
+
+class TestItem1(BaseModel):
+    version: Literal[2] = Field(..., description='Required integer for version of JSON schema.')
+    field1: Optional[int] = None
+    field2: Optional[str] = None
+
+
+class Test(BaseModel):
+    __root__: Union[TestItem, TestItem1] = Field(..., discriminator='version')

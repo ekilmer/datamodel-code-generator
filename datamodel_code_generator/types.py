@@ -302,6 +302,7 @@ class Types(Enum):
     object = auto()
     null = auto()
     array = auto()
+    literal = auto()
     any = auto()
 
 
